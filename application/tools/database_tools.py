@@ -33,7 +33,6 @@ def establish_mysql_connection():
     except Exception as e:
         return f"Failed to establish connection: {e}"
 
-@tool(parse_docstring=True)
 def execute_query(query: str):
     """
     Attempts to execute the generated SQL query.

@@ -1,66 +1,9 @@
 from langchain.prompts import PromptTemplate
 
-agent_prompt_template = PromptTemplate(
-    input_variables=["query", "retrieved_schema", "sql_query", "query_result", "error_message", "final_response", "intermediate_steps"],
-    template="""
-### Task ###
-You are an AI agent that doesn't have information about schema and databases. You don't have the power to execute query.You have access to the following tools:
-
-{tools}
-
-Use the following format: 
-
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-And, Follow these steps carefully COMPULSORILY using the tools:
-
-### Step 1: Retrieve Relevant Schema ### 
-- Search the vector database for the most relevant tables and column names based on the user’s query.
-- Output the retrieved schema.
-
-### Step 2: Establish SQL Connection ### 
-- Connect securely to the database.
-
-### Step 3: Generate SQL Query ### 
-- Using the retrieved schema, generate an appropriate SQL query.
-- Ensure the query is valid and considers edge cases.
-
-### Step 4: Execute the Query ###
-- Run the generated SQL query on the database.
-- If successful, return the results.
-- If an error occurs, capture the error message.
-
-### Step 5: Handle Errors (If Any) ###
-- If execution fails, analyze the error message.
-- Debug the issue and generate a corrected SQL query.
-- Attempt execution again.
-
-### Step 6: Provide Insights ###
-- Once data is retrieved, analyze it.
-- Summarize key trends, patterns, or anomalies.
-- Provide a human-readable response.
-
-### Inputs Given to Agent ###
-- User Query: {input}
-
-Begin!
-
-Question: {input}
-Thought: {agent_scratchpad}
-"""
-)
 
 sql_gen_prompt_template = PromptTemplate(
     template="""
-    You are an expert SQL Generator. Based on the provided database schema information, generate only the SQL query to answer the following question.
-    Always create a variable name to store the results.
+    You are an expert SQL Generator. Based on the provided database schema information, generate only One syntactically correct SQL query to answer the following question. Ensure that your query uses only the relevant tables and columns based on the schema information provided. The query should be limited to at most 1 results unless the question specifies a different number.
 
     Schema Information:
     {schema_info}
@@ -74,14 +17,18 @@ sql_gen_prompt_template = PromptTemplate(
 )
 
 insights_prompt_template = PromptTemplate(
-    template= """
-    You are an excellent data analyst. Rephrase the following information obtained and derive meaningful insights and tabluate the information as well.
-    result: {result}
+    template="""
+    You are an excellent data analyst. Based on the following information, analyze the question, the generated SQL query, and the results obtained from the database. Provide an interpretation of the results ONLY and give a detailed explanation in the format below.
 
-    Insights:
+    Question: {input}
+    SQL Query: {sql_query}
+    Results from Database: {output}
+
+    Interpretation:
     """,
-    input_variables=["result"]
+    input_variables=["input", "sql_query", "output"]
 )
+
 
 error_handling_prompt_template = PromptTemplate(
     template= """

@@ -57,27 +57,59 @@ failfunc = (
     })  
 )
 
+intermediate_results = []
+
+def generate_insights_from_intermediate(intermediate_results):
+    relevant_data = {}
+    for res in intermediate_results:
+        if res['step'] == "Human Message":
+            relevant_data["input"] = res['result']
+        elif res['step'] == "AI parsed_sql_query":
+            relevant_data["sql_query"] = res['result']  
+        elif res['step'] == "final_result":
+            relevant_data["output"] = res['result']
+    
+    insights_input = insights_prompt_template.format(**relevant_data)
+    print(insights_input)
+
+    result = llm.invoke(insights_input)
+
+    return result
+
 chain = (
     retriever
     | sql_gen_prompt_template  
-    | RunnableLambda(lambda x: print("Prompt Input:", x) or x)  
+    | RunnableLambda(lambda x: intermediate_results.append({"step": "Human Message", "result": x}) or x)  # Store intermediate result
+    | RunnableLambda(lambda x: print(f"\nPrompt Input:\n{x}") or x)  
     | llm  
-    | RunnableLambda(lambda x: print("Generated SQL Query:", x) or x)  
+    | StrOutputParser()
+    | RunnableLambda(lambda x: intermediate_results.append({"step": "AI llm_output", "result": x}) or x)  # Store intermediate result
+    | RunnableLambda(lambda x: print(f"\nGenerated SQL Query:\n{x}") or x)  
     | StrOutputParser()  
-    | RunnableLambda(lambda sql_query: print("Cleaned SQL Query:", sql_query.replace("\\", "")) or sql_query)  
+    | RunnableLambda(lambda sql_query: intermediate_results.append({"step": "AI parsed_sql_query", "result": sql_query}) or sql_query)  # Store intermediate result
     | RunnableLambda(lambda sql_query: execute_query(sql_query.replace("\\", "")))  
+    | RunnableLambda(lambda result: intermediate_results.append({"step": "AI db_query_result", "result": result}) or result)  # Store intermediate result
     | RunnableBranch(
         (lambda res: "success" in res and res["success"], passfunc),  
         failfunc  
     )
-    | RunnableLambda(lambda result: print("Raw Result obtained from DB:", result) or result)  
-    | insights_prompt_template  
-    | llm  
-    | RunnableLambda(lambda insights: print("Final Insights:", insights) or insights)  
+    | RunnableLambda(lambda result: print(f"\nRaw Result obtained from DB:\n{result}") or result)   
+    | RunnableLambda(lambda result: intermediate_results.append({"step": "final_result", "result": result}) or result)  # Store final result
+    | RunnableLambda(lambda x: generate_insights_from_intermediate(intermediate_results))  # Generate insights
+    | StrOutputParser()  
 )
 
 response = chain.invoke({
-    "question": "how many films are there in the inventory?"
+    "question": "how many staffs are present?"
 })
 
-print(response)
+# print(f"\nFinal Query Result:\n{response}")
+
+# print("\nIntermediate Results:")
+# for res in intermediate_results:
+#     print(f"{res['step']}: {res['result']}")
+
+
+# insights = generate_insights_from_intermediate(intermediate_results)
+
+# print(f"\nGenerated Insights:\n{insights}")

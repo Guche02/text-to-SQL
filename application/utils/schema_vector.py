@@ -28,6 +28,7 @@ Columns:
 - address2 (VARCHAR, 50) → Secondary street address.
 - district (VARCHAR, 20, NOT NULL) → District name.
 - city_id (SMALLINT UNSIGNED, Foreign Key) → References city.city_id, linking the address to a city.
+- location (GEOMETRY) → Stores the geographical co-ordinates of the location of customers.
 - postal_code (VARCHAR, 10) → Postal code.
 - phone (VARCHAR, 20, NOT NULL) → Contact phone number.
 - last_update (TIMESTAMP, NOT NULL) → Last update timestamp of the address.""",
