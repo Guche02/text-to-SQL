@@ -30,8 +30,27 @@ def establish_mysql_connection():
         )
         conn.close()
         return "Connection established"
+    except mysql.connector.Error as e:
+        return f"Database error: {e}"
     except Exception as e:
-        return f"Failed to establish connection: {e}"
+        return f"Unexpected error: {e}"
+    
+def extract_corrected_sql(ai_message):
+    """
+    Extracts the corrected SQL query from the AI model's response.
+    If no corrected query is found, return the error message.
+    """
+    if hasattr(ai_message, 'content'):
+        content = ai_message.content  
+        if "**Corrected SQL Query:**" in content:
+            query = content.split("**Corrected SQL Query:**")[-1].strip()
+        # elif "***SQL Query:***" in content:
+        #     query = content.split("**SQL Query:**")[-1].strip()
+        
+        #     print("\nExtracted SQL Query:\n", query)
+        #     return query
+        else: 
+           return ai_message.content  # If no corrected query, return the full response as error
 
 def execute_query(query: str):
     """
@@ -42,20 +61,42 @@ def execute_query(query: str):
         query (str): The SQL query to be executed.
 
     Returns:
-        list or dict: Query results or error message
+        dict: Query results or error message
     """
-    conn = mysql.connector.connect(
+    try:
+        # Attempt to connect to the database
+        conn = mysql.connector.connect(
             host=DB_HOST,
             user=DB_USER,
             password=DB_PASSWORD,
             database=DB_NAME
         )
-    cursor = conn.cursor()
-    cursor.execute(query)
-    result = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    try:
-     return {"success": True, "result": result}
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(query)
+            result = cursor.fetchall()
+            return {"success": True, "result": result}
+
+        except mysql.connector.ProgrammingError as e:
+            return {"success": False, "error": f"SQL Syntax Error: {e}", "failed_query": query}
+        except mysql.connector.IntegrityError as e:
+            return {"success": False, "error": f"Integrity Constraint Violation: {e}", "failed_query": query}
+        except mysql.connector.DatabaseError as e:
+            return {"success": False, "error": f"Database Error: {e}", "failed_query": query}
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected Error in Query Execution: {e}", "failed_query": query}
+        
+        finally:
+            cursor.close()
+
+    except mysql.connector.InterfaceError as e:
+        return {"success": False, "error": f"Connection Error: {e}"}
+    except mysql.connector.OperationalError as e:
+        return {"success": False, "error": f"Operational Error: {e}"}
     except Exception as e:
-        return {"success": False, "failed_query": query, "error": str(e)}
+        return {"success": False, "error": f"Unexpected Error: {e}"}
+
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            conn.close()

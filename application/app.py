@@ -1,7 +1,7 @@
 import streamlit as st
-from tools.pipeline import chain, generate_insights_from_intermediate
+from pipeline import chain
 
-intermediate_results = []
+# st.set_option('server.fileWatcherType', 'none')
 
 st.title("SQL Query Generator")
 st.markdown("### Chat with SQL Generator")

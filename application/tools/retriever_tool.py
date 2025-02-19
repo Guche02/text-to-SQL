@@ -1,35 +1,40 @@
-from sentence_transformers import SentenceTransformer
-from langchain.tools import tool
 import chromadb
+from sentence_transformers import SentenceTransformer
 
-client = chromadb.PersistentClient(path="D:\\Internship\\text-to-SQL\\application\\chroma")
-collection = client.get_collection("sql_data")
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+chroma_client = chromadb.PersistentClient(path="D:\\Internship\\text-to-SQL\\application\\chroma")
+collection = chroma_client.get_collection(name="sql_data")
 
-def retrieve_schema(query: str, top_n: int = 5) -> str:
+def retrieve_schema(query: str, top_n: int = 10):
     """
-    Retrieves the top N schema documents from a vector database based on the query.
+    Queries the ChromaDB vector store using semantic similarity search.
 
     Args:
-        query (str): The input query for which schema-related documents are to be retrieved.
-        top_n (int, optional): The number of top documents to return. Defaults to 3.
+        query (str): The input query.
+        top_n (int, optional): The number of top similar results to return. Defaults to 5.
 
     Returns:
-        str: A formatted string containing the top N retrieved schema documents, including table names and corresponding information.
+        list: A list of retrieved documents with similarity scores.
     """
-    query_embedding = embedder.encode(query).tolist()
-
+    query_embedding = embedding_model.encode(query).tolist()  
     results = collection.query(
-        query_embeddings=[query_embedding],
+        query_embeddings=[query_embedding], 
         n_results=top_n
     )
 
     retrieved_docs = []
-    for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-        retrieved_docs.append(f"Table: {meta['name']}\nInfo: {doc}\n")
+    for  doc in enumerate(results["documents"][0]):
+        retrieved_docs.append((doc))
 
-    return "\n".join(retrieved_docs)
+    return retrieved_docs
 
-# response = retrieve_schema("how many films are there in the inventory?")
-# print(response)
+# query = "In which store was customer with email 'MARY.SMITH@sakilacustomer.org' registered in?"
+# results = retrieve_schema(query)
+
+# print("results: ", results)
+
+# print("\nTop Retrieved Results:")
+# for i, (doc) in enumerate(results):
+#     print(f"Result {i+1} (\n{doc}\n")
+
