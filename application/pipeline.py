@@ -5,13 +5,18 @@ from langchain_core.output_parsers import StrOutputParser
 from tools.database_tools import extract_corrected_sql, execute_query
 from tools.retriever_tool import retrieve_schema
 from tools.llm_tools import generate_sql_query, generate_insights, handle_errors
-from utils.prompts import sql_gen_prompt_template, error_handling_prompt_template, insights_prompt_template, question_validation_prompt_template
+from utils.prompts import (
+    sql_gen_prompt_template,
+    error_handling_prompt_template,
+    insights_prompt_template,
+    question_validation_prompt_template,
+)
 from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "./configs/.env"))
 api_key = os.getenv("MISTRAL_API_KEY")
 
-llm = init_chat_model("mistral-medium", model_provider="mistralai", temperature=0.5, mistral_api_key=api_key)
+llm = init_chat_model("mistral-medium", model_provider="mistralai", temperature=0.3, mistral_api_key=api_key)
 
 validate_question = RunnableLambda(lambda x: question_validation_prompt_template.format(question=x["question"]))
 retriever = RunnableLambda(lambda x: {"schema_info": retrieve_schema(x["question"]), "question": x["question"]})
@@ -20,7 +25,7 @@ execute_sql = RunnableLambda(lambda x: execute_query(x))
 generate_insights_step = RunnableLambda(lambda x: generate_insights(x))
 handle_errors_step = RunnableLambda(lambda x: handle_errors(x))
 
-passfunc = RunnableLambda(lambda res: {"result": res["result"]})
+passfunc = RunnableLambda(lambda res: {"result": res["result"], "columns": res["columns"]})
 
 failfunc = (
     RunnableLambda(lambda x: (
@@ -58,18 +63,21 @@ failfunc = (
     })
 )
 
-
 intermediate_results = []
 
 def generate_insights_from_intermediate(intermediate_results):
+    """
+    Extracts relevant data from intermediate results and generates insights.
+    """
     relevant_data = {}
     for res in intermediate_results:
         if res['step'] == "Human Message":
             relevant_data["input"] = res['result']
         elif res['step'] == "AI parsed_sql_query":
             relevant_data["sql_query"] = res['result']  
-        elif res['step'] == "final_result":
+        elif res['step'] == "Raw DB Query Result":
             relevant_data["output"] = res['result']
+            relevant_data["columns"] = res.get("columns", [])  # Store columns as well
     
     insights_input = insights_prompt_template.format(**relevant_data)
     print(insights_input)
@@ -102,24 +110,28 @@ chain = (
     | StrOutputParser()  
     | RunnableLambda(lambda sql_query: intermediate_results.append({"step": "AI parsed_sql_query", "result": sql_query.replace("\\", "")}) or sql_query)  
     | RunnableLambda(lambda sql_query: execute_query(sql_query.replace("\\", "")))  
-    | RunnableLambda(lambda result: intermediate_results.append({"step": "AI db_query_result", "result": result}) or result)  
+    | RunnableLambda(lambda result: print(f"\nRaw Result obtained from DB:\n{result}") or result)   
+    | RunnableLambda(lambda result: (
+        intermediate_results.append({
+            "step": "Raw DB Query Result",
+            "result": result["result"],
+            "columns": result.get("columns", [])  # Store columns in intermediate results
+        }) or result
+    ))
     | RunnableBranch(
         (lambda res: res.get("success", True), passfunc),  
         failfunc
     )
-    | RunnableLambda(lambda result: print(f"\nRaw Result obtained from DB:\n{result}") or result)   
-    | RunnableLambda(lambda result: intermediate_results.append({"step": "final_result", "result": result}) or result)  
     | RunnableLambda(lambda x: generate_insights_from_intermediate(intermediate_results))  
     | StrOutputParser()  
 )
 
-query = """ 
-Retrieve the full name of customers, their email, the films they have rented, the category of each film, and the store where they rented the film from. Ensure the results include the rental date and the amount paid by the customer.
-"""
+# # Example Query Execution
+# query = """ 
+# Retrieve all stores, their managers, city, and country.
+# """
 
-# # query = """
-# # Hi
-# # """
+# response = chain.invoke({"question": query})
+# # print(f"\nFinal Query Result:\n{response}")
 
-response = chain.invoke({"question": query})
-print(f"\nFinal Query Result:\n{response}")
+# print("Intermediate Results are: ", intermediate_results)

@@ -2,12 +2,14 @@ import os
 import mysql.connector
 from langchain.tools import tool
 from dotenv import load_dotenv
+import datetime
+import decimal
+import base64
+import uuid
 
-# Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(__file__), "../configs/.env")
 load_dotenv(env_path)
 
-# Retrieve database credentials from environment variables
 DB_HOST = os.getenv("DB_HOST")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -55,13 +57,13 @@ def extract_corrected_sql(ai_message):
 def execute_query(query: str):
     """
     Attempts to execute the generated SQL query.
-    Returns results if successful, otherwise returns an error message.
+    Returns results along with column names as the first row if successful, otherwise returns an error message.
 
     Args:
         query (str): The SQL query to be executed.
 
     Returns:
-        dict: Query results or error message
+        dict: Query results as a list with column names as the first row (if successful), or error message.
     """
     try:
         # Attempt to connect to the database
@@ -76,7 +78,12 @@ def execute_query(query: str):
         try:
             cursor.execute(query)
             result = cursor.fetchall()
-            return {"success": True, "result": result}
+            column_names = [desc[0] for desc in cursor.description]  # Extract column names
+            
+            # Append column names as the first row in results
+            structured_result = [tuple(column_names)] + result  
+
+            return {"success": True, "columns": column_names, "result": structured_result}
 
         except mysql.connector.ProgrammingError as e:
             return {"success": False, "error": f"SQL Syntax Error: {e}", "failed_query": query}
@@ -100,3 +107,32 @@ def execute_query(query: str):
     finally:
         if 'conn' in locals() and conn.is_connected():
             conn.close()
+
+def serialize(obj):
+    """Convert non-serializable objects into JSON-serializable format."""
+    if isinstance(obj, datetime.datetime):  # Access datetime class through the module
+        return obj.isoformat()  # Convert datetime to ISO format string
+    elif isinstance(obj, datetime.date):  # Handle both date and datetime objects
+        return obj.isoformat()  # Convert date to ISO format string
+    elif isinstance(obj, decimal.Decimal):
+        return float(obj)  # Convert Decimal to float
+    elif isinstance(obj, bytes):
+        return base64.b64encode(obj).decode("utf-8")  # Encode bytes to a base64 string
+    elif isinstance(obj, uuid.UUID):
+        return str(obj)  # Convert UUID to string
+    # You can add more custom types here as needed
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
+test = """
+SELECT s.`store_id`, s.`manager_staff_id`, a.`address`, a.`city_id`, c.`city`, c.`country_id`, co.`country`
+FROM `store` s
+JOIN `address` a ON s.`address_id` = a.`address_id`
+JOIN `city` c ON a.`city_id` = c.`city_id`
+JOIN `country` co ON c.`country_id` = co.`country_id`
+JOIN `staff` st ON s.`manager_staff_id` = st.`staff_id`
+LIMIT 10;
+"""
+
+response = execute_query(test)
+print(response)

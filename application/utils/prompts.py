@@ -7,17 +7,16 @@ Given the following question, determine if it is a valid question related to a d
 Question: {question}
 
 Response: 
-Return only True or False.
+Return only True or False. No additional text
 If valid, return true if not valid return False.
 
 Result: 
 
 """
 
-
 sql_gen_prompt_template = PromptTemplate(
     template="""
-    You are an expert SQL Generator. Based on the provided database schema information, generate a syntactically correct SQL query. Always LIMIT the result to 10 for generated queries. Only generate the SQL query in executable SQL format (directly usable in SQL environment).
+    You are an expert SQL Generator. Based on the provided database schema information, generate a syntactically correct SQL query. Always LIMIT the result to 10 for generated queries. STRICTLY generate the SQL query and no additional text.
 
     Schema Information:
     {schema_info}
@@ -25,11 +24,10 @@ sql_gen_prompt_template = PromptTemplate(
     Question:
     {question}
 
-    SQL Query (in sql format):
+    SQL Query:
     """,
     input_variables=["schema_info", "question"]
 )
-
 
 insights_prompt_template = PromptTemplate(
     template="""

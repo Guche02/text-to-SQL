@@ -1,0 +1,173 @@
+**Simple Queries (No Joins)**
+
+1. Retrieve all actors' first and last names.
+```sql
+SELECT first_name, last_name FROM actor;
+```
+
+2. List all unique city names in the database.
+```sql
+SELECT DISTINCT city FROM city;
+```
+
+3. Find all categories available for films.
+```sql
+SELECT name FROM category;
+```
+
+4. Show all customers who are currently active.
+```sql
+SELECT first_name, last_name, email FROM customer WHERE active = 1;
+```
+
+5. Retrieve all stores' addresses.
+```sql
+SELECT address FROM address;
+```
+
+6. Get the total number of films in the inventory.
+```sql
+SELECT COUNT(*) FROM inventory;
+```
+
+7. Find all staff members working in the stores.
+```sql
+SELECT first_name, last_name, email FROM staff;
+```
+
+8. Retrieve payment details of a specific customer with `customer_id = 5`.
+```sql
+SELECT payment_id, amount, payment_date FROM payment WHERE customer_id = 5;
+```
+
+**Queries with One Join**
+
+9. Find all cities and their corresponding countries.
+```sql
+SELECT city.city, country.country
+FROM city
+JOIN country ON city.country_id = country.country_id;
+```
+
+10. List all customers with their associated store ID.
+```sql
+SELECT customer.first_name, customer.last_name, store.store_id
+FROM customer
+JOIN store ON customer.store_id = store.store_id;
+```
+
+11. Retrieve all staff members along with their addresses.
+```sql
+SELECT staff.first_name, staff.last_name, address.address
+FROM staff
+JOIN address ON staff.address_id = address.address_id;
+```
+
+12. Get all films along with their descriptions from the `film_text` table.
+```sql
+SELECT film_text.title, film_text.description
+FROM film_text
+JOIN film ON film_text.film_id = film.film_id;
+```
+
+13. List all payments along with customer names.
+```sql
+SELECT payment.payment_id, payment.amount, customer.first_name, customer.last_name
+FROM payment
+JOIN customer ON payment.customer_id = customer.customer_id;
+```
+
+**Queries with Two Joins**
+
+14. Find all cities along with their countries and last updated timestamps.
+```sql
+SELECT city.city, country.country, city.last_update
+FROM city
+JOIN country ON city.country_id = country.country_id;
+```
+
+15. List all customers with their address and city.
+```sql
+SELECT customer.first_name, customer.last_name, address.address, city.city
+FROM customer
+JOIN address ON customer.address_id = address.address_id
+JOIN city ON address.city_id = city.city_id;
+```
+
+16. Retrieve all store managers with their respective store addresses.
+```sql
+SELECT staff.first_name, staff.last_name, store.store_id, address.address
+FROM staff
+JOIN store ON staff.staff_id = store.manager_staff_id
+JOIN address ON store.address_id = address.address_id;
+```
+
+**Queries with Three Joins**
+
+17. Retrieve all payments along with customer names and the staff who processed them.
+```sql
+SELECT payment.payment_id, payment.amount, customer.first_name AS customer_name, staff.first_name AS staff_name
+FROM payment
+JOIN customer ON payment.customer_id = customer.customer_id
+JOIN staff ON payment.staff_id = staff.staff_id;
+```
+
+18. List all films with their categories and descriptions.
+```sql
+SELECT film.title, category.name, film_text.description
+FROM film
+JOIN film_category ON film.film_id = film_category.film_id
+JOIN category ON film_category.category_id = category.category_id
+JOIN film_text ON film.film_id = film_text.film_id;
+```
+
+19. Find all customers along with their city and country.
+```sql
+SELECT customer.first_name, customer.last_name, city.city, country.country
+FROM customer
+JOIN address ON customer.address_id = address.address_id
+JOIN city ON address.city_id = city.city_id
+JOIN country ON city.country_id = country.country_id;
+```
+
+**Queries with Four or More Joins**
+
+20. Find all films rented by customers along with rental and payment details.
+```sql
+SELECT customer.first_name, customer.last_name, film.title, rental.rental_date, payment.amount
+FROM rental
+JOIN customer ON rental.customer_id = customer.customer_id
+JOIN inventory ON rental.inventory_id = inventory.inventory_id
+JOIN film ON inventory.film_id = film.film_id
+JOIN payment ON rental.rental_id = payment.rental_id;
+```
+
+21. Retrieve all customers, their addresses, cities, and corresponding country names.
+```sql
+SELECT customer.first_name, customer.last_name, address.address, city.city, country.country
+FROM customer
+JOIN address ON customer.address_id = address.address_id
+JOIN city ON address.city_id = city.city_id
+JOIN country ON city.country_id = country.country_id;
+```
+
+22. Find all films along with their language, category, and rental information.
+```sql
+SELECT film.title, language.name AS language, category.name AS category, rental.rental_date
+FROM film
+JOIN language ON film.language_id = language.language_id
+JOIN film_category ON film.film_id = film_category.film_id
+JOIN category ON film_category.category_id = category.category_id
+JOIN inventory ON film.film_id = inventory.film_id
+JOIN rental ON inventory.inventory_id = rental.inventory_id;
+```
+
+23. Retrieve all stores, their managers, city, and country.
+```sql
+SELECT store.store_id, staff.first_name AS manager_name, city.city, country.country
+FROM store
+JOIN staff ON store.manager_staff_id = staff.staff_id
+JOIN address ON store.address_id = address.address_id
+JOIN city ON address.city_id = city.city_id
+JOIN country ON city.country_id = country.country_id;
+```
