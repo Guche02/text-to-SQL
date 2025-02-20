@@ -69,7 +69,6 @@ failfunc = (
 )
 
 def retry_failfunc(x, retries=3):
-    # Initialize the existing values for failed query, error, message, and result
     existing_failed_query = x.get("failed_query", "")
     existing_error = x.get("error", "")
     existing_message = x.get("message", "")

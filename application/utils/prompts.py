@@ -16,7 +16,7 @@ Result:
 
 sql_gen_prompt_template = PromptTemplate(
     template="""
-    You are an expert SQL Generator. Based on the provided database schema information, generate a syntactically correct SQL query. Always LIMIT the result to 10 for generated queries. STRICTLY generate the SQL query and no additional text.
+    You are an expert SQL Generator. Based on the provided database schema information, generate a syntactically correct SQL query. STRICTLY generate the SQL query and no additional text and no placeholders.
 
     Schema Information:
     {schema_info}

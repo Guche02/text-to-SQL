@@ -14,7 +14,6 @@ st.markdown("### Chat with SQL Generator")
 
 question = st.text_input("Enter your question:", "")
 
-# Initialize variables before accessing them
 parsed_sql_query = "N/A"
 raw_db_result = {}
 column_names = []
@@ -74,14 +73,16 @@ if isinstance(raw_db_result, dict) and "result" in raw_db_result:
     if isinstance(raw_db_result_list, list) and len(raw_db_result_list) > 1:
         column_names = list(raw_db_result_list[0])  
         data_rows = raw_db_result_list[1:]  
-        df = pd.DataFrame(data_rows, columns=column_names)
 
-        st.markdown("### Tabulated Raw Database Results:")
-        st.dataframe(df)
+        df = pd.DataFrame(data_rows, columns=column_names)
+        top_5_rows = df.head(5)  
+
+        st.markdown("### Tabulated Raw Database Results (Top 5 Rows):")
+        st.dataframe(top_5_rows)
 
         csv_data = df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            label="📥 Download Raw DB Results as CSV",
+            label="📥 Download Full Raw DB Results as CSV",
             data=csv_data,
             file_name="raw_db_results.csv",
             mime="text/csv"
@@ -94,7 +95,6 @@ if isinstance(raw_db_result, dict) and "result" in raw_db_result:
 else:
     st.warning("Please enter a question.")
 
-# Sidebar for chat history
 with st.sidebar:
     st.markdown("## Chat History")
     if st.session_state.chat_history:
