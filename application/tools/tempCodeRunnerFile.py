@@ -1,0 +1,1 @@
+ # if distance <= max_distance:  # Keep only results within threshold

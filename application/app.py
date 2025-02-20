@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
 import json
+import time
 from pipeline import chain, intermediate_results
 from tools.database_tools import serialize
+from httpx import HTTPStatusError
 
-# Initialize chat history in session state
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -20,35 +21,52 @@ column_names = []
 insights = "N/A"
 response = ""
 
+def invoke_chain_with_retry(question, max_retries=3, delay=5):
+    """Retries invoking the chain if rate limited."""
+    attempts = 0
+    while attempts < max_retries:
+        try:
+            return chain.invoke({"question": question})
+        except HTTPStatusError as e:
+            if e.response.status_code == 429:  
+                st.warning("Rate limit exceeded. Retrying in 5 seconds...")
+                time.sleep(delay)
+                attempts += 1
+            else:
+                raise e  
+    st.error("Failed after multiple attempts due to rate limits.")
+    return None
+
 if st.button("Generate Query"):
     if question:
         with st.spinner("Processing..."):
             intermediate_results.clear()
-            response = chain.invoke({"question": question})
+            response = invoke_chain_with_retry(question)
 
-            parsed_sql_query = next(
-                (res["result"] for res in intermediate_results if res["step"] == "AI parsed_sql_query"), "N/A"
-            )
-            raw_db_result = next(
-                (res for res in intermediate_results if res["step"] == "Raw DB Query Result"), {}
-            )
-            column_names = next(
-                (res["result"] for res in intermediate_results if res["step"] == "columns"), []
-            )
-            insights = next(
-                (res["result"] for res in intermediate_results if res["step"] == "final_result"), "N/A"
-            )
+            if response:
+                parsed_sql_query = next(
+                    (res["result"] for res in intermediate_results if res["step"] == "AI parsed_sql_query"), "N/A"
+                )
+                raw_db_result = next(
+                    (res for res in intermediate_results if res["step"] == "Raw DB Query Result"), {}
+                )
+                column_names = next(
+                    (res["result"] for res in intermediate_results if res["step"] == "columns"), []
+                )
+                insights = next(
+                    (res["result"] for res in intermediate_results if res["step"] == "final_result"), "N/A"
+                )
 
-            st.session_state.chat_history.append({
-                "question": question,
-                "parsed_sql_query": parsed_sql_query,
-                "raw_db_result": json.loads(json.dumps(raw_db_result.get("result", "N/A"), default=serialize)),
-                "response": response
-            })
+                st.session_state.chat_history.append({
+                    "question": question,
+                    "parsed_sql_query": parsed_sql_query,
+                    "raw_db_result": json.loads(json.dumps(raw_db_result.get("result", "N/A"), default=serialize)),
+                    "response": response
+                })
 
-            st.markdown(f"**Question:** {question}")
-            st.markdown("### Generated SQL Query:")
-            st.code(parsed_sql_query, language="sql")
+                st.markdown(f"**Question:** {question}")
+                st.markdown("### Generated SQL Query:")
+                st.code(parsed_sql_query, language="sql")
 
 if isinstance(raw_db_result, dict) and "result" in raw_db_result:
     raw_db_result_list = raw_db_result["result"]
@@ -73,7 +91,6 @@ if isinstance(raw_db_result, dict) and "result" in raw_db_result:
             
     st.markdown("### Insights:")
     st.write(response)
-
 else:
     st.warning("Please enter a question.")
 

@@ -124,15 +124,15 @@ def serialize(obj):
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
-test = """
-SELECT s.`store_id`, s.`manager_staff_id`, a.`address`, a.`city_id`, c.`city`, c.`country_id`, co.`country`
-FROM `store` s
-JOIN `address` a ON s.`address_id` = a.`address_id`
-JOIN `city` c ON a.`city_id` = c.`city_id`
-JOIN `country` co ON c.`country_id` = co.`country_id`
-JOIN `staff` st ON s.`manager_staff_id` = st.`staff_id`
-LIMIT 10;
-"""
+# test = """
+# SELECT s.`store_id`, s.`manager_staff_id`, a.`address`, a.`city_id`, c.`city`, c.`country_id`, co.`country`
+# FROM `store` s
+# JOIN `address` a ON s.`address_id` = a.`address_id`
+# JOIN `city` c ON a.`city_id` = c.`city_id`
+# JOIN `country` co ON c.`country_id` = co.`country_id`
+# JOIN `staff` st ON s.`manager_staff_id` = st.`staff_id`
+# LIMIT 10;
+# """
 
-response = execute_query(test)
-print(response)
+# response = execute_query(test)
+# print(response)

@@ -1,4 +1,5 @@
 import os
+import httpx
 from langchain.chat_models import init_chat_model
 from langchain_core.runnables import RunnableLambda, RunnableBranch
 from langchain_core.output_parsers import StrOutputParser
@@ -25,7 +26,11 @@ execute_sql = RunnableLambda(lambda x: execute_query(x))
 generate_insights_step = RunnableLambda(lambda x: generate_insights(x))
 handle_errors_step = RunnableLambda(lambda x: handle_errors(x))
 
-passfunc = RunnableLambda(lambda res: {"result": res["result"], "columns": res["columns"]})
+passfunc = RunnableLambda(lambda res: {
+    "result": res.get("result", res),  
+    "columns": res.get("columns", [])
+})
+
 
 failfunc = (
     RunnableLambda(lambda x: (
@@ -54,14 +59,60 @@ failfunc = (
     })  
     | RunnableLambda(lambda x: {
         "success": False, 
-        "result": x["result"].replace("\\", "")  
+        "result": x["result"].replace("\\", "") if x["result"] is not None else "SQL Query not generated."
     })  
     | RunnableLambda(lambda x: (print("\nCorrected SQL Query:\n", x["result"]), x)[-1])   
     | RunnableLambda(lambda x: {
         "success": False, 
-        "result": execute_query(x["result"])  
+        "result": execute_query(x["result"])  if x["result"] is not None else "SQL query not generated."
     })
 )
+
+def retry_failfunc(x, retries=3):
+    # Initialize the existing values for failed query, error, message, and result
+    existing_failed_query = x.get("failed_query", "")
+    existing_error = x.get("error", "")
+    existing_message = x.get("message", "")
+    existing_result = x.get("result", "")
+    
+    for attempt in range(retries):
+        print(f"\nAttempt {attempt + 1} to correct the SQL query...")
+        
+        x = failfunc.invoke(x)
+        new_failed_query = x.get("failed_query", "")
+        if new_failed_query:
+            existing_failed_query += f"\n[Attempt {attempt + 1}] {new_failed_query}"
+
+        new_error = x.get("error", "")
+        if new_error:
+            existing_error += f"\n[Attempt {attempt + 1}] {new_error}"
+
+        new_message = x.get("message", "")
+        if new_message:
+            existing_message += f"\n[Attempt {attempt + 1}] {new_message}"
+
+        new_result = x.get("result", "")
+        if new_result:
+            existing_result += f"\n[Attempt {attempt + 1}] {new_result}"
+
+        intermediate_results.append({
+            "step": f"FailFunc Attempt {attempt + 1}",
+            "failed_query": existing_failed_query,
+            "error": existing_error,
+            "message": existing_message,
+            "result": existing_result,
+        })
+        
+        x["failed_query"] = existing_failed_query
+        x["error"] = existing_error
+        x["message"] = existing_message
+        x["result"] = existing_result
+        
+        if x.get("success", False):  
+            return x
+    
+    return x  
+
 
 intermediate_results = []
 
@@ -76,8 +127,8 @@ def generate_insights_from_intermediate(intermediate_results):
         elif res['step'] == "AI parsed_sql_query":
             relevant_data["sql_query"] = res['result']  
         elif res['step'] == "Raw DB Query Result":
-            relevant_data["output"] = res['result']
-            relevant_data["columns"] = res.get("columns", [])  # Store columns as well
+            relevant_data["output"] = res.get("result", res)  
+            relevant_data["columns"] = res.get("columns", [])  
     
     insights_input = insights_prompt_template.format(**relevant_data)
     print(insights_input)
@@ -114,24 +165,29 @@ chain = (
     | RunnableLambda(lambda result: (
         intermediate_results.append({
             "step": "Raw DB Query Result",
-            "result": result["result"],
-            "columns": result.get("columns", [])  # Store columns in intermediate results
+            "result": result.get("result", result),  
+            "columns": result.get("columns", [])  
         }) or result
     ))
     | RunnableBranch(
         (lambda res: res.get("success", True), passfunc),  
-        failfunc
+        RunnableLambda(retry_failfunc)  
     )
     | RunnableLambda(lambda x: generate_insights_from_intermediate(intermediate_results))  
     | StrOutputParser()  
 )
 
-# # Example Query Execution
-# query = """ 
-# Retrieve all stores, their managers, city, and country.
+# query = """ Hello, how are you?
 # """
+# try:
+#     response = chain.invoke({"question": query})
+#     print(f"\nFinal Query Result:\n{response}")
+# except httpx.HTTPStatusError as e:
+#     if e.response.status_code == 429:
+#         print("\nRequest rate limited. Please try again later.")
+#         response = "Request rate limited. Please try again later."
+#     else:
+#         print(f"\nAn unexpected error occurred: {str(e)}")
+#         response = f"An unexpected error occurred: {str(e)}"
 
-# response = chain.invoke({"question": query})
-# # print(f"\nFinal Query Result:\n{response}")
-
-# print("Intermediate Results are: ", intermediate_results)
+# print(intermediate_results)
