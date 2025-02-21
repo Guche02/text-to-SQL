@@ -3,7 +3,7 @@ import httpx
 from langchain.chat_models import init_chat_model
 from langchain_core.runnables import RunnableLambda, RunnableBranch
 from langchain_core.output_parsers import StrOutputParser
-from tools.database_tools import extract_corrected_sql, execute_query
+from tools.database_tools import extract_corrected_sql, execute_select_query
 from tools.retriever_tool import retrieve_schema
 from tools.llm_tools import generate_sql_query, generate_insights, handle_errors
 from utils.prompts import (
@@ -22,7 +22,6 @@ llm = init_chat_model("mistral-medium", model_provider="mistralai", temperature=
 validate_question = RunnableLambda(lambda x: question_validation_prompt_template.format(question=x["question"]))
 retriever = RunnableLambda(lambda x: {"schema_info": retrieve_schema(x["question"]), "question": x["question"]})
 generate_sql = RunnableLambda(lambda x: generate_sql_query(x["schema_info"], x["question"]))
-execute_sql = RunnableLambda(lambda x: execute_query(x))
 generate_insights_step = RunnableLambda(lambda x: generate_insights(x))
 handle_errors_step = RunnableLambda(lambda x: handle_errors(x))
 
@@ -64,7 +63,7 @@ failfunc = (
     | RunnableLambda(lambda x: (print("\nCorrected SQL Query:\n", x["result"]), x)[-1])   
     | RunnableLambda(lambda x: {
         "success": False, 
-        "result": execute_query(x["result"])  if x["result"] is not None else "SQL query not generated."
+        "result": execute_select_query(x["result"])  if x["result"] is not None else "SQL query not generated."
     })
 )
 
@@ -159,7 +158,7 @@ chain = (
     | RunnableLambda(lambda x: print(f"\nGenerated SQL Query:\n{x}") or x)  
     | StrOutputParser()  
     | RunnableLambda(lambda sql_query: intermediate_results.append({"step": "AI parsed_sql_query", "result": sql_query.replace("\\", "")}) or sql_query)  
-    | RunnableLambda(lambda sql_query: execute_query(sql_query.replace("\\", "")))  
+    | RunnableLambda(lambda sql_query: execute_select_query(sql_query.replace("\\", "")))  
     | RunnableLambda(lambda result: print(f"\nRaw Result obtained from DB:\n{result}") or result)   
     | RunnableLambda(lambda result: (
         intermediate_results.append({
@@ -176,8 +175,9 @@ chain = (
     | StrOutputParser()  
 )
 
-# query = """ Hello, how are you?
+# query = """ list the top 30 movies present in the database
 # """
+
 # try:
 #     response = chain.invoke({"question": query})
 #     print(f"\nFinal Query Result:\n{response}")

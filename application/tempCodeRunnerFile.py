@@ -1,4 +1,2 @@
-response = chain.invoke({"question": query})
-print(f"\nFinal Query Result:\n{response}")
-
-print(intermediate_results)
+| RunnableLambda(lambda x: generate_insights_from_intermediate(intermediate_results))  
+        | StrOutputParser()  

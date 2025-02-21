@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import json
 import time
-from pipeline import chain, intermediate_results
+from pipeline_1 import chain, intermediate_results
+from pipeline_2 import chain2, intermediate_results2
 from tools.database_tools import serialize
 from httpx import HTTPStatusError
 
@@ -12,7 +13,14 @@ if "chat_history" not in st.session_state:
 st.title("SQL Query Generator")
 st.markdown("### Chat with SQL Generator")
 
+# Dropdown for choosing between modify or read database
+action_type = st.selectbox("Select action", ["Read Database", "Modify Database"])
+
+# Question input for "Read Database"
 question = st.text_input("Enter your question:", "")
+
+if action_type == "Modify Database":
+    csv_file = st.file_uploader("Upload a CSV file for modification:", type="csv")
 
 parsed_sql_query = "N/A"
 raw_db_result = {}
@@ -36,36 +44,95 @@ def invoke_chain_with_retry(question, max_retries=3, delay=5):
     st.error("Failed after multiple attempts due to rate limits.")
     return None
 
-if st.button("Generate Query"):
-    if question:
-        with st.spinner("Processing..."):
-            intermediate_results.clear()
-            response = invoke_chain_with_retry(question)
+def invoke_chain2_with_retry(query, csv_data, max_retries=3, delay=5):
+    """Retries invoking chain2 if rate limited and processes the query with CSV data."""
+    attempts = 0
+    while attempts < max_retries:
+        try:
+            if csv_data:
+                csv_content = pd.read_csv(csv_data)
+            else:
+                csv_content = pd.DataFrame()  
+            st.success(csv_content)
+            result = chain2.invoke({"question": query, "data": csv_content.to_dict(orient="records")})
+            return result
+        
+        except HTTPStatusError as e:
+            if e.response.status_code == 429:
+                st.warning("Rate limit exceeded. Retrying in 5 seconds...")
+                time.sleep(delay)
+                attempts += 1
+            else:
+                raise e  
+    st.error("Failed after multiple attempts due to rate limits.")
+    return None
 
-            if response:
-                parsed_sql_query = next(
-                    (res["result"] for res in intermediate_results if res["step"] == "AI parsed_sql_query"), "N/A"
-                )
-                raw_db_result = next(
-                    (res for res in intermediate_results if res["step"] == "Raw DB Query Result"), {}
-                )
-                column_names = next(
-                    (res["result"] for res in intermediate_results if res["step"] == "columns"), []
-                )
-                insights = next(
-                    (res["result"] for res in intermediate_results if res["step"] == "final_result"), "N/A"
-                )
+if action_type == "Read Database":
+    if st.button("Generate Query"):
+        if question:
+            with st.spinner("Processing..."):
+                intermediate_results.clear()
+                response = invoke_chain_with_retry(question)
 
-                st.session_state.chat_history.append({
-                    "question": question,
-                    "parsed_sql_query": parsed_sql_query,
-                    "raw_db_result": json.loads(json.dumps(raw_db_result.get("result", "N/A"), default=serialize)),
-                    "response": response
-                })
+                if response:
+                    parsed_sql_query = next(
+                        (res["result"] for res in intermediate_results if res["step"] == "AI parsed_sql_query"), "N/A"
+                    )
+                    raw_db_result = next(
+                        (res for res in intermediate_results if res["step"] == "Raw DB Query Result"), {}
+                    )
+                    column_names = next(
+                        (res["result"] for res in intermediate_results if res["step"] == "columns"), []
+                    )
+                    insights = next(
+                        (res["result"] for res in intermediate_results if res["step"] == "final_result"), "N/A"
+                    )
 
-                st.markdown(f"**Question:** {question}")
-                st.markdown("### Generated SQL Query:")
-                st.code(parsed_sql_query, language="sql")
+                    st.session_state.chat_history.append({
+                        "question": question,
+                        "parsed_sql_query": parsed_sql_query,
+                        "raw_db_result": json.loads(json.dumps(raw_db_result.get("result", "N/A"), default=serialize)),
+                        "response": response
+                    })
+
+                    st.markdown(f"**Question:** {question}")
+                    st.markdown("### Generated SQL Query:")
+                    st.code(parsed_sql_query, language="sql")
+
+if action_type == "Modify Database":
+    if st.button("Generate Query"):
+        if question:  
+            with st.spinner("Processing modification..."):
+                response = invoke_chain2_with_retry(question, csv_file)
+
+                if response:
+                    parsed_sql_query = next(
+                        (res["result"] for res in intermediate_results2 if res["step"] == "AI parsed_sql_query"), "N/A"
+                    )
+                    raw_db_result = next(
+                        (res for res in intermediate_results2 if res["step"] == "Raw DB Query Result"), {}
+                    )
+                    column_names = next(
+                        (res["result"] for res in intermediate_results2 if res["step"] == "columns"), []
+                    )
+                    insights = next(
+                        (res["result"] for res in intermediate_results2 if res["step"] == "final_result"), "N/A"
+                    )
+
+                    st.session_state.chat_history.append({
+                        "question": question,
+                        "parsed_sql_query": parsed_sql_query,
+                        "raw_db_result": json.loads(json.dumps(raw_db_result.get("result", "N/A"), default=serialize)),
+                        "response": response
+                    })
+
+                    st.markdown(f"**Question:** {question}")
+                    st.markdown("### Generated SQL Query:")
+                    st.code(parsed_sql_query, language="sql")
+
+                    if raw_db_result.get("result") == "Query executed successfully.":
+                          st.success(raw_db_result["result"])
+
 
 if isinstance(raw_db_result, dict) and "result" in raw_db_result:
     raw_db_result_list = raw_db_result["result"]
@@ -88,7 +155,10 @@ if isinstance(raw_db_result, dict) and "result" in raw_db_result:
             mime="text/csv"
         )
     else:
-        st.warning("Raw database results are not structured for table/CSV download.")
+        if raw_db_result.get("result") == "Query executed successfully.":
+            st.success(raw_db_result["result"])
+        else:
+            st.warning("Raw database results are not structured for table/CSV download.")
             
     st.markdown("### Insights:")
     st.write(response)

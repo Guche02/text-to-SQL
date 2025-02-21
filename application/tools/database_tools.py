@@ -1,6 +1,5 @@
 import os
 import mysql.connector
-from langchain.tools import tool
 from dotenv import load_dotenv
 import datetime
 import decimal
@@ -14,6 +13,26 @@ DB_HOST = os.getenv("DB_HOST")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME")
+
+def extract_corrected_sql(ai_message):
+    """
+    Extracts the corrected SQL query from the AI model's response.
+    If no corrected query is found, return the error message.
+    
+    Args:
+        ai_message (object): The AI-generated response containing the corrected SQL query.
+
+    Returns:
+        str: Extracted SQL query or error message
+    """
+    if hasattr(ai_message, 'content'):
+        content = ai_message.content.strip()
+
+        if "**Corrected SQL Query:**" in content:
+            query = content.split("**Corrected SQL Query:**")[-1].strip()
+            return query
+        else: 
+            return ai_message.content  # If no corrected query, return the full response as an error
 
 def establish_mysql_connection():
     """
@@ -36,37 +55,12 @@ def establish_mysql_connection():
         return f"Database error: {e}"
     except Exception as e:
         return f"Unexpected error: {e}"
-    
-def extract_corrected_sql(ai_message):
-    """
-    Extracts the corrected SQL query from the AI model's response.
-    If no corrected query is found, return the error message.
-    """
-    if hasattr(ai_message, 'content'):
-        content = ai_message.content  
-        if "**Corrected SQL Query:**" in content:
-            query = content.split("**Corrected SQL Query:**")[-1].strip()
-        # elif "***SQL Query:***" in content:
-        #     query = content.split("**SQL Query:**")[-1].strip()
-        
-        #     print("\nExtracted SQL Query:\n", query)
-        #     return query
-        else: 
-           return ai_message.content  # If no corrected query, return the full response as error
 
-def execute_query(query: str):
-    """
-    Attempts to execute the generated SQL query.
-    Returns results along with column names as the first row if successful, otherwise returns an error message.
-
-    Args:
-        query (str): The SQL query to be executed.
-
-    Returns:
-        dict: Query results as a list with column names as the first row (if successful), or error message.
-    """
+def execute_select_query(query: str):
+    """Executes a SELECT query and returns the results."""
+    conn = None
+    cursor = None
     try:
-        # Attempt to connect to the database
         conn = mysql.connector.connect(
             host=DB_HOST,
             user=DB_USER,
@@ -74,65 +68,76 @@ def execute_query(query: str):
             database=DB_NAME
         )
         cursor = conn.cursor()
+        cursor.execute(query)
+        results = cursor.fetchall()
+        column_names = [desc[0] for desc in cursor.description] if cursor.description else []
 
-        try:
-            cursor.execute(query)
-            result = cursor.fetchall()
-            column_names = [desc[0] for desc in cursor.description]  # Extract column names
-            
-            # Append column names as the first row in results
-            structured_result = [tuple(column_names)] + result  
+        return {"success": True, "columns": column_names, "result": results}
 
-            return {"success": True, "columns": column_names, "result": structured_result}
-
-        except mysql.connector.ProgrammingError as e:
-            return {"success": False, "error": f"SQL Syntax Error: {e}", "failed_query": query}
-        except mysql.connector.IntegrityError as e:
-            return {"success": False, "error": f"Integrity Constraint Violation: {e}", "failed_query": query}
-        except mysql.connector.DatabaseError as e:
-            return {"success": False, "error": f"Database Error: {e}", "failed_query": query}
-        except Exception as e:
-            return {"success": False, "error": f"Unexpected Error in Query Execution: {e}", "failed_query": query}
-        
-        finally:
-            cursor.close()
-
-    except mysql.connector.InterfaceError as e:
-        return {"success": False, "error": f"Connection Error: {e}"}
-    except mysql.connector.OperationalError as e:
-        return {"success": False, "error": f"Operational Error: {e}"}
+    except mysql.connector.Error as e:
+        return {"failed_query": query, "success": False, "error": f"MySQL Error: {e}"}
     except Exception as e:
-        return {"success": False, "error": f"Unexpected Error: {e}"}
-
+        return {"failed_query": query, "success": False, "error": f"Unexpected Error: {e}"}
     finally:
-        if 'conn' in locals() and conn.is_connected():
+        if cursor:
+            cursor.close()
+        if conn:
             conn.close()
+
+def execute_modify_query(query: str):
+    """Executes an INSERT, UPDATE, DELETE, or other modification query."""
+    conn = None
+    cursor = None
+    try:
+        conn = mysql.connector.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME
+        )
+        cursor = conn.cursor()
+        cursor.execute(query)
+        conn.commit()
+        affected_rows = cursor.rowcount
+
+        return {"success": True, "columns": [], "result": f"Query executed successfully."}
+
+    except mysql.connector.Error as e:
+        return {"failed_query": query, "success": False, "result": f"MySQL Error: {e}"}
+    except Exception as e:
+        return {"failed_query": query, "success": False, "result": f"Unexpected Error: {e}"}
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+def execute_query(query: str):
+    """Identifies the query type and calls the appropriate execution function."""
+    query_type = query.strip().lower().split()[0]  # Get the first word (SELECT, INSERT, etc.)
+
+    if query_type == "select":
+        return execute_select_query(query)
+    else:
+        return execute_modify_query(query)
 
 def serialize(obj):
     """Convert non-serializable objects into JSON-serializable format."""
-    if isinstance(obj, datetime.datetime):  # Access datetime class through the module
-        return obj.isoformat()  # Convert datetime to ISO format string
-    elif isinstance(obj, datetime.date):  # Handle both date and datetime objects
-        return obj.isoformat()  # Convert date to ISO format string
+    if isinstance(obj, datetime.datetime):
+        return obj.isoformat()
+    elif isinstance(obj, datetime.date):
+        return obj.isoformat()
     elif isinstance(obj, decimal.Decimal):
-        return float(obj)  # Convert Decimal to float
+        return float(obj)
     elif isinstance(obj, bytes):
-        return base64.b64encode(obj).decode("utf-8")  # Encode bytes to a base64 string
+        return base64.b64encode(obj).decode("utf-8")
     elif isinstance(obj, uuid.UUID):
-        return str(obj)  # Convert UUID to string
-    # You can add more custom types here as needed
+        return str(obj)
     raise TypeError(f"Type {type(obj)} not serializable")
 
+# # Example Usage:
+# test_query = "SELECT * FROM staff"
+# print(execute_query(test_query))
 
-# test = """
-# SELECT s.`store_id`, s.`manager_staff_id`, a.`address`, a.`city_id`, c.`city`, c.`country_id`, co.`country`
-# FROM `store` s
-# JOIN `address` a ON s.`address_id` = a.`address_id`
-# JOIN `city` c ON a.`city_id` = c.`city_id`
-# JOIN `country` co ON c.`country_id` = co.`country_id`
-# JOIN `staff` st ON s.`manager_staff_id` = st.`staff_id`
-# LIMIT 10;
-# """
-
-# response = execute_query(test)
-# print(response)
+# modify_query = "INSERT INTO staff (first_name, last_name, address_id, store_id, username) VALUES ('looza', 'subedy', 1, 1, 'looza');"
+# print(execute_query(modify_query))

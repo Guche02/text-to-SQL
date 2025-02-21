@@ -14,9 +14,31 @@ Result:
 
 """
 
+insert_sql_gen_prompt_template = PromptTemplate(
+    template="""
+    You are an expert SQL Generator. Based on the provided database schema information, generate a syntactically correct SQL INSERT query.
+    The query should be in a directly executable format in the SQL environment. 
+    If the data is provided, insert the data according to the question else follow the instructions in provided in question only.
+    DON'T GENERATE ANY NOTES
+
+    Schema Information:
+    {schema_info}
+
+    Question:
+    {question}. Only generate query. No additional text. 
+
+    Data:
+    {data}
+
+    SQL INSERT Query:
+    """,
+    input_variables=["schema_info", "question", "data"]
+)
+
 sql_gen_prompt_template = PromptTemplate(
     template="""
-    You are an expert SQL Generator. Based on the provided database schema information, generate a syntactically correct SQL query. STRICTLY generate the SQL query and no additional text and no placeholders.
+    You are an expert SQL Generator. Based on the provided database schema information, generate a syntactically correct SQL query. LIMIT each generated query upto only 30 results.
+     !!!! STRICTLY generate the SQL query and no additional text and no placeholders. !!!!
 
     Schema Information:
     {schema_info}
@@ -28,6 +50,23 @@ sql_gen_prompt_template = PromptTemplate(
     """,
     input_variables=["schema_info", "question"]
 )
+
+
+
+
+
+query_classifier_prompt_template = PromptTemplate(
+    template="""
+    You are an expert SQL Query Classifier. Classify the given SQL query into one of the following types: SELECT, INSERT, DELETE. STRICTLY return only the type without any additional text.
+
+    SQL Query:
+    {query}
+
+    Query Type:
+    """,
+    input_variables=["query"]
+)
+
 
 insights_prompt_template = PromptTemplate(
     template="""
