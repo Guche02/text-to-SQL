@@ -3,12 +3,12 @@ import httpx
 from langchain.chat_models import init_chat_model
 from langchain_core.runnables import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
-from tools.database_tools import  execute_query, execute_modify_query
+from tools.database_tools import execute_modify_query
 from tools.retriever_tool import retrieve_schema
-from tools.llm_tools import generate_sql_query, generate_insights, handle_errors
 from utils.prompts import (
     insights_prompt_template,
     insert_sql_gen_prompt_template,
+    delete_sql_gen_prompt_template
 )
 from dotenv import load_dotenv
 import pandas as pd
@@ -20,7 +20,7 @@ llm = init_chat_model("mistral-medium", model_provider="mistralai", temperature=
 
 retriever = RunnableLambda(lambda x: {"schema_info": retrieve_schema(f"{x['question']} + {x['data']}"), "question": x["question"], "data": x["data"]})
 
-intermediate_results2 = []
+intermediate_results3 = []
 
 def generate_insights_from_intermediate(intermediate_results):
     """
@@ -42,32 +42,30 @@ def generate_insights_from_intermediate(intermediate_results):
     result = llm.invoke(insights_input)
     return result
 
-chain2 = (
+chain3 = (
         retriever 
-        | RunnableLambda(lambda x: intermediate_results2.append({"step": "Human Message", "result": x}) or x)  
-        | insert_sql_gen_prompt_template
+        | RunnableLambda(lambda x: intermediate_results3.append({"step": "Human Message", "result": x}) or x)  
+        | delete_sql_gen_prompt_template
         | llm
         | StrOutputParser()
-        | RunnableLambda(lambda x: intermediate_results2.append({"step": "AI llm_output", "result": x}) or x)
+        | RunnableLambda(lambda x: intermediate_results3.append({"step": "AI llm_output", "result": x}) or x)
         | RunnableLambda(lambda x: print(f"\nGenerated SQL Query:\n{x}") or x)
         | StrOutputParser()
-        | RunnableLambda(lambda sql_query: intermediate_results2.append({"step": "AI parsed_sql_query", "result": sql_query.replace("\\", "")}) or sql_query)
+        | RunnableLambda(lambda sql_query: intermediate_results3.append({"step": "AI parsed_sql_query", "result": sql_query.replace("\\", "")}) or sql_query)
         | RunnableLambda(lambda sql_query: execute_modify_query(sql_query.replace("\\", "")))
         | RunnableLambda(lambda result: print(f"\nRaw Result obtained from DB:\n{result}") or result)
         | RunnableLambda(lambda result: (
-            intermediate_results2.append({
+            intermediate_results3.append({
                 "step": "Raw DB Query Result",
                 "result": result.get("result", result),  
                 "columns": result.get("columns", [])  
             }) or result
         ))
-        | RunnableLambda(lambda x: generate_insights_from_intermediate(intermediate_results2))  
+        | RunnableLambda(lambda x: generate_insights_from_intermediate(intermediate_results3))  
         | StrOutputParser()  
     )
 
-# query = """ insert the following data into the staff table"""
-
-# Insert a new staff with name looza subedy, working on store 2 and living on address id 2 with username looza into the databasse.
+# query = """ delete the following data from the staff table"""
 
 # data =  """ 
 # first_name, last_name, store_id,address_id,username,password
@@ -79,7 +77,7 @@ chain2 = (
 # print(retrieve_schema(f"{query} and {data}"))
 
 # try:
-#         response = chain2.invoke({"question": query, "data": data})
+#         response = chain3.invoke({"question": query, "data": data})
 #         print(f"\nFinal Query Result:\n{response}")
 # except httpx.HTTPStatusError as e:
 #         if e.response.status_code == 429:
@@ -89,4 +87,4 @@ chain2 = (
 #             print(f"\nAn unexpected error occurred: {str(e)}")
 #             response = f"An unexpected error occurred: {str(e)}"
 
-# print(intermediate_results2)
+# print(intermediate_results3)

@@ -71,6 +71,8 @@ def execute_select_query(query: str):
         cursor.execute(query)
         results = cursor.fetchall()
         column_names = [desc[0] for desc in cursor.description] if cursor.description else []
+        results = [tuple(column_names)] + results
+        print("Results: ", results)
 
         return {"success": True, "columns": column_names, "result": results}
 
