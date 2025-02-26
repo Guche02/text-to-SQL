@@ -11,11 +11,10 @@ The system follows these steps:
 5. **Insight Generation**: Analyzes the results to provide meaningful insights.
 
 ## Technologies Used
-- **Python**: Main programming language.
+- **Streamlit**: Web Interface
 - **Mistral Model**: Used for natural language to SQL query transformation.
 - **ChromaDB**: Vector database for efficient retrieval of schema-related information.
-- **SQLite/MySQL/PostgreSQL**: Database system for query execution.
-- **LangChain/OpenAI API**: May be used for better prompt engineering and LLM responses.
+- **MySQL**: Database system for query execution.
 
 ## Project Structure
 
@@ -55,9 +54,9 @@ application/
   - `schema.txt`: Stores the database schema as raw text.
   - `test_data.txt`: Sample data for testing the system.
 - **pipelines**
-  - `pipeline_1.py`: Prepares and cleans the user's natural language query.
-  - `pipeline_2.py`: Uses the Mistral model to generate SQL queries.
-  - `pipeline_3.py`: Executes the SQL query and extracts meaningful insights.
+  - `pipeline_1.py`: For select queries
+  - `pipeline_2.py`: For insert queries
+  - `pipeline_3.py`: For delete queries
 - **temp.py**: Temporary script used for testing or debugging purposes.
 
 
@@ -74,11 +73,12 @@ pip install -r requirements.txt
 ```
 
 3. **Set Up Environment Variables**
-   - Rename `.env.example` to `.env`.
+   - Modify `.env`.
    - Add required API keys and database connection details.
 
-4. **Run the Application**
+4. ** Change directory Run the Application**
 ```bash
+cd application
 python app.py
 ```
 
